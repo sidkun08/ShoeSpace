@@ -1,76 +1,174 @@
 // App.js
-import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, Dimensions, PanResponder, Animated, TouchableOpacity, Linking, GestureResponderEvent } from 'react-native';
-import * as FileSystem from 'expo-file-system';
-import { Easing } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Animated, PanResponder, Dimensions, Image, TouchableOpacity, Linking, ActivityIndicator } from 'react-native';
+import { useShoeContext, ShoeCard } from '../context/ShoeContext';
 
-const { width, height } = Dimensions.get('window');
-
-// Define the shoe data interface
-interface ShoeCard {
-  id: number;
-  name: string;
-  price: number;
-  size: number;
-  seller: string;
-  imageUrl: string;
-  productLink: string;
-}
+const { width } = Dimensions.get('window');
 
 const App = () => {
   const [shoes, setShoes] = useState<ShoeCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const pan = useRef(new Animated.ValueXY()).current;
   const [isDragging, setIsDragging] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const cardVisible = useRef(true);
+  
+  // Get context functions
+  const { addLikedShoe, addDislikedShoe } = useShoeContext();
 
+  // Fetch shoes from Google Spreadsheet
+  useEffect(() => {
+    const fetchShoes = async () => {
+      try {
+        setLoading(true);
+        
+        const spreadsheetId = '1-OYBE6xVNsynmvxMdrEKztjZdZe20kaoJiRUSopwg9E';
+        const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json`;
+        
+        const response = await fetch(url);
+        const text = await response.text();
+        const jsonText = text.substring(47).slice(0, -2);
+        const data = JSON.parse(jsonText);
+        
+        if (data.table && data.table.rows) {
+          const headers = data.table.cols.map((col: any) => col.label.toLowerCase());
+          const parsedShoes = data.table.rows
+            .map((row: any) => {
+              const shoe: Partial<ShoeCard> = {};
+              headers.forEach((header: string, i: number) => {
+                shoe[header as keyof ShoeCard] = row.c[i]?.v?.toString() || '';
+              });
+              
+              return {
+                id: shoe.id || Math.random().toString(36).substr(2, 9),
+                name: shoe.name || '',
+                price: shoe.price || '',
+                size: shoe.size || '',
+                seller: shoe.seller || '',
+                imageUrl: shoe.imageurl || '',
+                productLink: shoe.productlink || '#',
+              } as ShoeCard;
+            })
+            .filter((shoe): shoe is ShoeCard => 
+              typeof shoe.name === 'string' && 
+              typeof shoe.imageUrl === 'string' && 
+              shoe.name !== '' && 
+              shoe.imageUrl !== ''
+            );
+          
+          setShoes(parsedShoes);
+        } else {
+          setError('No shoes found in the spreadsheet.');
+        }
+        
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching shoes:', err);
+        setError('Failed to load shoes. Please try again later.');
+        setLoading(false);
+      }
+    };
+
+    fetchShoes();
+  }, []);
+
+  // Reset card position
   const resetCard = () => {
+    // Cancel any ongoing animations
+    if (animationRef.current) {
+      animationRef.current.stop();
+      animationRef.current = null;
+    }
+    
+    // Make sure the card is visible
+    cardVisible.current = true;
+    
+    // Reset position and state
     pan.setValue({ x: 0, y: 0 });
     setIsDragging(false);
     setIsAnimating(false);
   };
 
+  // Handle card swipe completion
+  const handleSwipeComplete = (direction: 'left' | 'right') => {
+    const currentShoe = shoes[currentIndex];
+    if (currentShoe) {
+      if (direction === 'right') {
+        addLikedShoe(currentShoe);
+      } else {
+        addDislikedShoe(currentShoe);
+      }
+    }
+    
+    // Hide the card before changing index
+    cardVisible.current = false;
+    
+    // Move to next card
+    setCurrentIndex(prev => prev + 1);
+    
+    // Reset position after a short delay to ensure smooth transition
+    setTimeout(() => {
+      resetCard();
+    }, 50);
+  };
+
   const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => !isAnimating,
+    onStartShouldSetPanResponder: () => !isAnimating && cardVisible.current,
+    onMoveShouldSetPanResponder: () => !isAnimating && cardVisible.current,
     onPanResponderGrant: () => {
       setIsDragging(true);
     },
     onPanResponderMove: (_, gesture) => {
-      if (!isDragging || isAnimating) return;
+      if (isAnimating || !cardVisible.current) return;
       pan.setValue({ x: gesture.dx, y: 0 });
     },
     onPanResponderRelease: (_, gesture) => {
-      if (isAnimating) return;
+      if (isAnimating || !cardVisible.current) return;
       
       setIsDragging(false);
-      if (Math.abs(gesture.dx) > 100) {
+      const swipeThreshold = width * 0.25;
+      
+      if (Math.abs(gesture.dx) > swipeThreshold) {
         setIsAnimating(true);
-        const direction = gesture.dx > 0 ? width : -width;
+        const direction = gesture.dx > 0 ? 'right' : 'left';
+        const toValue = gesture.dx > 0 ? width + 100 : -width - 100;
         
-        Animated.timing(pan, {
-          toValue: { x: direction, y: 0 },
-          duration: 300,
+        // Store animation reference
+        animationRef.current = Animated.timing(pan, {
+          toValue: { x: toValue, y: 0 },
+          duration: 250,
           useNativeDriver: true,
-        }).start(() => {
-          if (currentIndex < shoes.length - 1) {
-            setCurrentIndex(prev => prev + 1);
+        });
+        
+        animationRef.current.start(({ finished }) => {
+          if (finished) {
+            handleSwipeComplete(direction);
+          } else {
+            resetCard();
           }
-          resetCard();
         });
       } else {
-        Animated.spring(pan, {
+        // Return to center if not swiped far enough
+        setIsAnimating(true);
+        animationRef.current = Animated.spring(pan, {
           toValue: { x: 0, y: 0 },
           useNativeDriver: true,
           friction: 5,
-        }).start(() => resetCard());
+        });
+        
+        animationRef.current.start(({ finished }) => {
+          setIsAnimating(false);
+          if (!finished) {
+            resetCard();
+          }
+        });
       }
     },
     onPanResponderTerminate: () => {
-      Animated.spring(pan, {
-        toValue: { x: 0, y: 0 },
-        useNativeDriver: true,
-        friction: 5,
-      }).start(() => resetCard());
+      resetCard();
     },
   });
 
@@ -83,7 +181,7 @@ const App = () => {
   const renderCard = (shoe: ShoeCard) => {
     return (
       <Animated.View 
-        key={shoe.id}
+        key={`shoe-${shoe.id}`}
         style={[
           styles.card,
           {
@@ -114,48 +212,51 @@ const App = () => {
     );
   };
 
-  useEffect(() => {
-    const loadShoeData = async () => {
-      try {
-        const SHEET_ID = '1-OYBE6xVNsynmvxMdrEKztjZdZe20kaoJiRUSopwg9E';
-        const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
-        
-        const response = await fetch(csvUrl);
-        const csvText = await response.text();
-        
-        // Updated order: name, price, imageUrl, productLink, seller, size
-        const rows = csvText.split('\n').slice(1);
-        const formattedShoes = rows.map((row, index) => {
-          const [name, price, imageUrl, productLink, seller, size] = row.split(',');
-          return {
-            id: index + 1,
-            name: name.trim(),
-            price: Number(price),
-            imageUrl: imageUrl.trim(),
-            productLink: productLink.trim(),
-            seller: seller.trim(),
-            size: Number(size)
-          };
-        });
-        
-        setShoes(formattedShoes);
-      } catch (error) {
-        console.error('Error loading shoe data:', error);
-      }
-    };
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#2ecc71" />
+        <Text style={styles.loadingText}>Loading shoes...</Text>
+      </View>
+    );
+  }
 
-    loadShoeData();
-  }, []);
+  if (error) {
+    return (
+      <View style={[styles.container, styles.errorContainer]}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={() => {
+            setError(null);
+            setLoading(true);
+            // Re-trigger the useEffect
+            setShoes([]);
+          }}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (shoes.length === 0) {
+    return (
+      <View style={[styles.container, styles.errorContainer]}>
+        <Text style={styles.errorText}>No shoes found.</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {currentIndex < shoes.length ? (
+      {currentIndex < shoes.length && cardVisible.current ? (
         renderCard(shoes[currentIndex])
-      ) : (
+      ) : currentIndex >= shoes.length ? (
         <View style={[styles.card, { alignItems: 'center', justifyContent: 'center' }]}>
           <Text style={styles.name}>No more shoes!</Text>
         </View>
-      )}
+      ) : null}
     </View>
   );
 };
@@ -166,6 +267,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#e74c3c',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#2ecc71',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   card: {
     position: 'absolute',

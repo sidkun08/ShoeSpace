@@ -1,109 +1,199 @@
-import { StyleSheet, Image, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Dimensions, Linking } from 'react-native';
+import { useShoeContext, ShoeCard } from '../context/ShoeContext';
 
-import { Collapsible } from '@/components/Collapsible';
-import { ExternalLink } from '@/components/ExternalLink';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+const { width } = Dimensions.get('window');
 
-export default function TabTwoScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Explore</ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image source={require('@/assets/images/react-logo.png')} style={{ alignSelf: 'center' }} />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Custom fonts">
-        <ThemedText>
-          Open <ThemedText type="defaultSemiBold">app/_layout.tsx</ThemedText> to see how to load{' '}
-          <ThemedText style={{ fontFamily: 'SpaceMono' }}>
-            custom fonts such as this one.
-          </ThemedText>
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/versions/latest/sdk/font">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user's current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful <ThemedText type="defaultSemiBold">react-native-reanimated</ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+const ExploreScreen = () => {
+  const [activeTab, setActiveTab] = useState<'liked' | 'disliked' | null>(null);
+  const { likedShoes, dislikedShoes } = useShoeContext();
+
+  const renderShoeItem = ({ item }: { item: ShoeCard }) => (
+    <TouchableOpacity 
+      style={styles.shoeCard}
+      onPress={() => Linking.openURL(item.productLink)}
+    >
+      <Image 
+        source={{ uri: item.imageUrl }} 
+        style={styles.shoeImage}
+        resizeMode="contain"
+      />
+      <View style={styles.shoeInfo}>
+        <Text style={styles.shoeName}>{item.name}</Text>
+        <Text style={styles.shoePrice}>${item.price}</Text>
+        <Text style={styles.shoeDetails}>Size: {item.size}</Text>
+        <Text style={styles.shoeDetails}>Seller: {item.seller}</Text>
+      </View>
+    </TouchableOpacity>
   );
-}
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Your Shoes</Text>
+      
+      <View style={styles.tabContainer}>
+        <TouchableOpacity 
+          style={[
+            styles.tabButton, 
+            activeTab === 'liked' && styles.activeTabButton
+          ]}
+          onPress={() => setActiveTab('liked')}
+        >
+          <Text style={[
+            styles.tabText,
+            activeTab === 'liked' && styles.activeTabText
+          ]}>
+            Liked Shoes
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[
+            styles.tabButton, 
+            activeTab === 'disliked' && styles.activeTabButton
+          ]}
+          onPress={() => setActiveTab('disliked')}
+        >
+          <Text style={[
+            styles.tabText,
+            activeTab === 'disliked' && styles.activeTabText
+          ]}>
+            Disliked Shoes
+          </Text>
+        </TouchableOpacity>
+      </View>
+      
+      {activeTab === 'liked' && (
+        <FlatList
+          data={likedShoes}
+          renderItem={renderShoeItem}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>No liked shoes yet. Start swiping right!</Text>
+          }
+        />
+      )}
+      
+      {activeTab === 'disliked' && (
+        <FlatList
+          data={dislikedShoes}
+          renderItem={renderShoeItem}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>No disliked shoes yet. Start swiping left!</Text>
+          }
+        />
+      )}
+      
+      {activeTab === null && (
+        <View style={styles.instructionsContainer}>
+          <Text style={styles.instructionsText}>
+            Select "Liked Shoes" or "Disliked Shoes" to view your swipe history
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+    padding: 16,
   },
-  titleContainer: {
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  tabContainer: {
     flexDirection: 'row',
-    gap: 8,
+    marginBottom: 20,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#e0e0e0',
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  activeTabButton: {
+    backgroundColor: '#2ecc71',
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#555',
+  },
+  activeTabText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  listContainer: {
+    paddingBottom: 20,
+  },
+  shoeCard: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    marginBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 3,
+  },
+  shoeImage: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f9f9f9',
+  },
+  shoeInfo: {
+    padding: 12,
+  },
+  shoeName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  shoePrice: {
+    fontSize: 15,
+    color: '#2ecc71',
+    marginBottom: 4,
+  },
+  shoeDetails: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 2,
+  },
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#888',
+    marginTop: 40,
+  },
+  instructionsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  instructionsText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 24,
   },
 });
+
+export default ExploreScreen;
